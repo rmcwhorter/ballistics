@@ -22,7 +22,7 @@ uv run -q --with numpy --with scipy --with pandas scripts/kl.py out
 uv run -q --with numpy --with scipy --with pandas scripts/knn_bias_check.py out
 python3 scripts/build_page.py out
 
-echo "== Gen 1 vs Gen 2 reticle image"
+echo "== Reticle comparison image (Gen 1 vs Gen 2, Gen 2 vs Trijicon Credo)"
 uv run -q --with numpy --with pillow scripts/reticle_compare.py
 
 echo "== optional: independent solver reference values (compare with tests/reference.rs)"

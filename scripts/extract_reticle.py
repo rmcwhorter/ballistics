@@ -4,7 +4,7 @@
 
 Needs `curl` and poppler's `pdftocairo`. Downloads the manual (Wayback copy; the live
 primaryarmsoptics.com URL is behind a bot check) into data/, converts the vector reticle
-art on page 10 ("MILS") and page 6 ("BDC AUTO RANGING") to SVG, decodes the geometry, and
+art on PDF page 10 ("MILS", printed page 9) and page 6 ("BDC AUTO RANGING") to SVG, decodes the geometry, and
 compares every value against the constants in src/reticle.rs. Exits non-zero on mismatch.
 """
 import hashlib
@@ -107,6 +107,15 @@ def decode_mils_page():
     for r, h in zip([800, 700, 600, 500, 400], halves):
         print(f"      {r} yd bar {h:.3f} MIL vs {35 / (r * 0.036):.3f}")
 
+    # Horizontal position of the ranging bars (each drawn as a pair of outline edges), and
+    # the manual's own "6 MILS" / "1 MIL" dimension brackets (blue strokes).
+    xs = sorted({round((p[0] - cx) / scale, 4) for p in pts if p[0] > xmin + 1e-6})
+    bar_x = [-(a + b) / 2 for a, b in zip(xs[0::2], xs[1::2])][1:]  # first pair is the 1-MIL scale line
+    brackets = sorted((x["w"] / scale for x in s if x["stroke"] == "#00aeef" and x["fill"] is None and x["w"] > 0.5
+                       and x["bb"][2] < cx + 1), reverse=True)
+    print("ranging bars, MIL from center (expect 10..6): " + " ".join(f"{b:.3f}" for b in bar_x))
+    print(f"dimension brackets: '6 MILS' {brackets[0]:.3f}, '1 MIL' {brackets[1]:.3f}")
+
     # BDC stem: hashes are the runs of the outline that leave the stem to the right.
     stem = max((x for x in black if abs((x["bb"][0] + x["bb"][2]) / 2 - cx) < 1 and x["bb"][1] > y0), key=lambda x: x["h"])
     stem_pts = outline(stem)
@@ -127,7 +136,16 @@ def decode_mils_page():
     for dx, dy in dot_c:
         if dy > 0.5:
             rows.setdefault(round(dy, 1), []).append(abs(dx))
-    return scale, y0, stem_top, stem_bottom, hashes, rows, leads
+
+    # Row numerals "4" / "6" / "8" beside the BDC (glyph outlines ~0.4 x 0.58 MIL).
+    numerals = {}
+    for x in black:
+        w, h = x["w"] / scale, x["h"] / scale
+        dy = mil((x["bb"][1] + x["bb"][3]) / 2)
+        if 0.3 < w < 0.5 and 0.5 < h < 0.65 and dy > 1:
+            numerals.setdefault(round(dy, 1), []).append(abs((x["bb"][0] + x["bb"][2]) / 2 - cx) / scale)
+    numerals = {k: sum(v) / len(v) for k, v in numerals.items()}
+    return scale, y0, stem_top, stem_bottom, hashes, rows, leads, numerals, bar_x, brackets
 
 
 def decode_bdc_page(stem_top_mil, stem_bottom_mil):
@@ -147,18 +165,20 @@ def rust_constants():
     bdc = {int(float(r)): float(m) for r, m in re.findall(r"range_yd:\s*([\d.]+),\s*mil:\s*([\d.]+)", src)}
     wind = {int(float(r)): (float(a), float(b)) for r, a, b in re.findall(r"\(([\d.]+),\s*([\d.]+),\s*([\d.]+)\),", src)}
     leads = [float(m) for m in re.findall(r"\([\d.]+,\s*([\d.]+),\s*\"\w+\"\)", src)]
-    return bdc, wind, leads
+    w15 = re.search(r"WIND15[^=]*=\s*&\[(.*?)\];", src, re.S).group(1)
+    wind15 = {int(float(r)): float(m) for r, m in re.findall(r"\(([\d.]+),\s*([\d.]+)\)", w15)}
+    return bdc, wind, leads, wind15
 
 
 def main():
     fetch()
-    scale, y0, stem_top, stem_bottom, hashes, rows, leads = decode_mils_page()
-    bdc, wind, rs_leads = rust_constants()
+    scale, y0, stem_top, stem_bottom, hashes, rows, leads, numerals, bar_x, brackets = decode_mils_page()
+    bdc, wind, rs_leads, wind15 = rust_constants()
     bad = []
 
-    def check(name, got, want, tol=TOL):
+    def check(name, got, want, tol=TOL, ref="reticle.rs"):
         ok = abs(got - want) <= tol
-        print(f"  {'ok ' if ok else 'BAD'} {name:<28} extracted {got:7.3f}  reticle.rs {want:7.3f}")
+        print(f"  {'ok ' if ok else 'BAD'} {name:<28} extracted {got:7.3f}  {ref:<10} {want:7.3f}")
         if not ok:
             bad.append(name)
 
@@ -191,6 +211,18 @@ def main():
         else:
             check(f"{r} yd 5 mph", offs[0], wind[r][0])
             check(f"{r} yd 10 mph", offs[-1], wind[r][1])
+
+    print("\nScale vs the manual's own dimensions:")
+    for got, want in zip(bar_x, [10, 9, 8, 7, 6]):
+        check(f"ranging bar at {want} MIL", got, want, 0.01, "manual")
+    check("'6 MILS' bracket", brackets[0], 6.0, 0.03, "manual")
+    check("'1 MIL' bracket", brackets[1], 1.0, 0.03, "manual")
+
+    print("\n15 mph holds (row numerals), and 3x the 5 mph hold on the same row:")
+    for r in [400, 600, 800]:
+        got = numerals[round(hash_by_range[r][0], 1)]
+        check(f"{r} yd 15 mph (numeral)", got, wind15[r])
+        print(f"      3 x 5 mph hold = {3 * wind[r][0]:.3f}, 1.5 x 10 mph hold = {1.5 * wind[r][1]:.3f}")
 
     print("\nLead dots on the crosshair:")
     for got, want, name in zip(leads, rs_leads, ["3 mph", "6 mph", "9 mph"]):

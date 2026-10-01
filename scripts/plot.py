@@ -8,7 +8,8 @@ miss = pd.read_csv(f"{d}/miss.csv")
 wind = pd.read_csv(f"{d}/wind.csv")
 
 LOADS = ["M193 55gr FMJBT", "SS109/M855 62gr", "Hornady 77gr OTM"]
-SHORT = {"M193 55gr FMJBT": "M193 @ 3032", "SS109/M855 62gr": "SS109 @ 2808", "Hornady 77gr OTM": "77gr OTM @ 2650"}
+NAME = {"M193 55gr FMJBT": "M193", "SS109/M855 62gr": "SS109", "Hornady 77gr OTM": "77gr OTM"}
+SHORT = {l: f"{NAME[l]} @ {miss[miss.load == l].mv.iloc[0]:.0f}" for l in NAME}
 COLOR = dict(zip(LOADS, ["#2a78d6", "#eb6834", "#1baf7a"]))
 INK, MUTED, GRID, SURF = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 FLOOR, TOL = -50, 6
@@ -63,20 +64,21 @@ ax.text(95, -30, "\n".join(lines), fontsize=10, color=INK, va="top",
 # Wind panel: what the "10 mph" dot actually equals.
 ax = axes[1, 1]
 style(ax)
-ax.axhline(10, color=MUTED, lw=1, ls=(0, (4, 3)))
-ax.text(385, 9.9, "reticle says 10 mph", ha="left", va="top", color=MUTED, fontsize=9.5)
+ax.plot([380, 800], [10, 10], color=MUTED, lw=1, ls=(0, (4, 3)))
+ax.text(385, 10.12, "reticle says 10 mph", ha="left", va="bottom", color=MUTED, fontsize=9.5)
 for load in LOADS:
     s = wind[wind.load == load]
     ax.plot(s.range_yd, s.dot10_mph, color=COLOR[load], lw=2)
     ax.scatter(s.range_yd, s.dot10_mph, s=36, color=COLOR[load], edgecolor=SURF, linewidth=1.5, zorder=4)
-    ax.annotate(f"{s.dot10_mph.iloc[-1]:.1f} mph", (800, s.dot10_mph.iloc[-1]), xytext=(10, 6 if load == LOADS[2] else 0),
+    ax.annotate(f"{s.dot10_mph.iloc[-1]:.1f} mph  (\"8\" numeral: {s.numeral15_mph.iloc[-1]:.1f})", (800, s.dot10_mph.iloc[-1]), xytext=(10, 0),
                 textcoords="offset points", va="center", fontsize=10, color=INK)
-ax.set_xlim(380, 860)
+ax.set_xlim(380, 960)
 ax.set_ylim(5, 11.5)
 ax.set_xticks(range(400, 801, 100))
 ax.set_title("Wind: the \"10 mph\" dot actually equals…", loc="left", color=INK, fontsize=13, fontweight="bold", pad=10)
 ax.set_ylabel("full-value crosswind, mph")
-ax.set_xlabel("range, yards  (5 mph dot = half of these)")
+ax.set_xlabel("range, yards  (5 mph dot = half of these; the row numerals 4 / 6 / 8 are the 15 mph hold = 1.5x)")
+
 
 fig.text(0.06, 0.958, "PLxC 1-8x24 FFP RDB  ·  ACSS Raptor 5.56/.308 Yard G2 BDC  -  how three loads calibrate",
          fontsize=19, fontweight="bold", color=INK)
@@ -86,7 +88,7 @@ handles = [plt.Line2D([], [], color=COLOR[l], lw=2, marker="o", ms=6, mec=SURF) 
 fig.legend(handles, [SHORT[l] + " fps" for l in LOADS], loc="upper left", bbox_to_anchor=(0.055, 0.92),
            ncol=3, frameon=False, fontsize=11.5, handlelength=2.2)
 fig.text(0.06, 0.03,
-         "Assumptions: ICAO sea level (59 °F, 29.92 inHg), 2.75\" sight height, 1:7 twist. G7 BCs: M193 0.120, M855 0.151 (Litz), Hornady 77gr OTM 0.190 (Hornady).\n"
+         "Assumptions: 14.5\" barrel (77gr velocity is a guess for it; Mk262 is ~2750 from 20\"), ICAO sea level (59 °F, 29.92 inHg), 2.75\" sight height, 1:7 twist. G7 BCs: M193 0.120, M855 0.151 (Litz), Hornady 77gr OTM 0.190 (Hornady).\n"
          "Misses below -50\" are pinned to the floor with their value. 200 yd omitted (no physical mark). Wind excludes spin drift (~0.3-0.5 mil right at 800).",
          fontsize=9.5, color=MUTED)
 out = f"{d}/bdc_calibration.png"

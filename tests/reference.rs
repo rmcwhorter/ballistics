@@ -7,7 +7,7 @@
 
 use ballistics::atmo::Atmosphere;
 use ballistics::drag::DragTable;
-use ballistics::reticle::{BDC, WIND};
+use ballistics::reticle::{BDC, WIND, WIND15};
 use ballistics::solver::*;
 
 fn bullet(gr: f64, len: f64, bc: f64) -> Projectile {
@@ -47,7 +47,10 @@ fn check(proj: Projectile, mv: f64, rows: &[Row]) {
         let ctx = format!("{} @ {r} yd: ours {p:?}", proj.name);
         assert!((p.time_s - t).abs() < 2e-3, "TOF {ctx}");
         assert!((p.velocity_fps - v).abs() < 1.0, "velocity {ctx}");
-        assert!((p.elevation_in - e).abs() < 0.1 + 2e-4 * e.abs(), "elevation {ctx}");
+        assert!(
+            (p.elevation_in - e).abs() < 0.1 + 2e-4 * e.abs(),
+            "elevation {ctx}"
+        );
         assert!((p.windage_in - w).abs() < 0.05, "windage {ctx}");
     }
 }
@@ -92,32 +95,69 @@ fn hornady_77_matches_py_ballisticcalc() {
     );
 }
 
-/// The manual says the BDC is built around Mk262 (77gr, 2750 fps) with a 50 yd zero.
-/// With the extracted subtensions, that load should sit on every mark from 300 to 800.
-#[test]
-fn bdc_is_drawn_for_mk262_with_50_yd_zero() {
+fn bdc_miss_mil(mv: f64, zero_yd: f64) -> Vec<(f64, f64)> {
     let s = Solver::default();
     let p = bullet(77.0, 0.990, 0.190);
     let zero = Zero {
-        range_yd: 50.0,
+        range_yd: zero_yd,
         offset_in: 0.0,
         atmo: Atmosphere::icao(),
     };
-    let angle = s.bore_angle(&p, &RIFLE, 2750.0, &zero);
+    let angle = s.bore_angle(&p, &RIFLE, mv, &zero);
     let mut cond = Conditions::standard();
     cond.spin_drift = false;
     let marks: Vec<_> = BDC.iter().filter(|m| m.range_yd >= 300.0).collect();
     let ranges: Vec<f64> = marks.iter().map(|m| m.range_yd).collect();
-    for (m, pt) in marks.iter().zip(s.trajectory(&p, &RIFLE, 2750.0, angle, &cond, &ranges)) {
-        let miss = pt.elevation_mil + m.mil;
-        assert!(miss.abs() < 0.25, "{} yd miss {miss:.3} mil", m.range_yd);
+    marks
+        .iter()
+        .zip(s.trajectory(&p, &RIFLE, mv, angle, &cond, &ranges))
+        .map(|(m, pt)| (m.range_yd, pt.elevation_mil + m.mil))
+        .collect()
+}
+
+/// The manual says the BDC is built around Mk262 (77gr, 2750 fps) with a 50 yd zero. That
+/// load sits on the 400-600 marks, but the mark spacing is wrong for it: the 300 mark is
+/// ~0.2 mil low of the bullet and the 800 mark ~0.2 mil high, a 0.45 mil tilt.
+#[test]
+fn bdc_matches_mk262_with_50_yd_zero_through_600() {
+    let m = bdc_miss_mil(2750.0, 50.0);
+    for &(r, miss) in &m {
+        let tol = if (400.0..=600.0).contains(&r) {
+            0.10
+        } else {
+            0.25
+        };
+        assert!(miss.abs() < tol, "{r} yd miss {miss:.3} mil");
+    }
+    let tilt = m[0].1 - m[m.len() - 1].1;
+    assert!(tilt > 0.4, "300 vs 800 tilt {tilt:.3}");
+}
+
+/// The spacing of the marks fits ~2820-2860 fps, but at those speeds a 50 yd zero puts every
+/// mark ~0.3 mil off. So no 50 yd zero fits all marks within 0.13 mil, at any velocity...
+#[test]
+fn no_50_yd_zero_fits_every_mark_tightly() {
+    for mv in (2600..=3000).step_by(10) {
+        let worst = bdc_miss_mil(mv as f64, 50.0)
+            .iter()
+            .fold(0.0_f64, |a, m| a.max(m.1.abs()));
+        assert!(worst > 0.13, "{mv} fps fits within {worst:.3} mil");
     }
 }
 
-/// The wind dots are drawn for 5 and 10 mph; for a 77gr load near design velocity they
-/// should be within half a mph of that.
+/// ...while a 100 yd zero at ~2860 fps fits every mark from 300 to 800 flat. So the marks
+/// alone don't confirm the manual's stated design point.
 #[test]
-fn wind_dots_fit_77gr() {
+fn bdc_fits_77gr_with_100_yd_zero_flat() {
+    for (r, miss) in bdc_miss_mil(2860.0, 100.0) {
+        assert!(miss.abs() < 0.13, "{r} yd miss {miss:.3} mil");
+    }
+}
+
+/// The wind dots are drawn for 5 and 10 mph and the row numerals for 15 mph; for a 77gr
+/// load near design velocity they should be within 5% of that.
+#[test]
+fn wind_holds_fit_77gr() {
     let s = Solver::default();
     let p = bullet(77.0, 0.990, 0.190);
     let zero = Zero {
@@ -131,9 +171,19 @@ fn wind_dots_fit_77gr() {
     cond.aero_jump = false;
     cond.wind = Wind::crosswind_from_left(10.0);
     let ranges: Vec<f64> = WIND.iter().map(|w| w.0).collect();
-    for (w, pt) in WIND.iter().zip(s.trajectory(&p, &RIFLE, 2650.0, angle, &cond, &ranges)) {
+    for (w, pt) in WIND
+        .iter()
+        .zip(s.trajectory(&p, &RIFLE, 2650.0, angle, &cond, &ranges))
+    {
         let per_mph = pt.windage_mil / 10.0;
-        assert!((w.1 / per_mph - 5.0).abs() < 0.5, "{} yd 5 mph dot", w.0);
+        assert!((w.1 / per_mph - 5.0).abs() < 0.25, "{} yd 5 mph dot", w.0);
         assert!((w.2 / per_mph - 10.0).abs() < 0.5, "{} yd 10 mph dot", w.0);
+        if let Some(n) = WIND15.iter().find(|n| n.0 == w.0) {
+            assert!(
+                (n.1 / per_mph - 15.0).abs() < 0.75,
+                "{} yd 15 mph numeral",
+                w.0
+            );
+        }
     }
 }

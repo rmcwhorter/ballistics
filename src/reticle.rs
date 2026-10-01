@@ -1,13 +1,16 @@
 //! Primary Arms ACSS Raptor 5.56/.308 Yard G2 (PLxC 1-8x24 FFP RDB) subtensions.
 //!
 //! Extracted from the vector artwork in Primary Arms' reticle manual
-//! (PLxC-1-8x24-FFP-RDB-RAPTOR-RETICLE-MANUAL_WEB.pdf, (c) 2025), page 9 "MILS".
-//! In that drawing the 1-MIL ticks on the side ranging scale are 13.609 units apart
-//! and the horizontal crosshair is centered at y = 130.833. The scale was cross-checked
-//! three ways against design intent stated in the manual:
+//! (PLxC-1-8x24-FFP-RDB-RAPTOR-RETICLE-MANUAL_WEB.pdf, (c) 2025), PDF page 10 (printed
+//! page 9) "MILS". In that drawing the 1-MIL ticks on the side ranging scale are 13.609
+//! units apart and the horizontal crosshair is centered at y = 130.833. The scale was
+//! cross-checked against the manual's own labels and stated design intent:
+//!   - the drawing's "6 MILS" and "1 MIL" brackets measure 6.00 and 1.01 MIL, and the
+//!     ranging bars sit at 6.00, 7.00, 8.00, 9.00 and 10.00 MIL from center,
 //!   - each vertical ranging bar is 5'10" at its labeled range (400 yd bar: 4.857 vs 4.861 MIL),
 //!   - each BDC hash is 18" wide at its range (500/600/700/800: 1.000/0.830/0.713/0.626 MIL),
-//!   - 5 and 10 mph wind dots scale exactly 1:2 on every row.
+//!   - 5 and 10 mph wind dots scale exactly 1:2 on every row, and the row numerals sit at
+//!     exactly 3x the 5 mph hold (15 mph).
 //!
 //! The manual states the BDC is "primarily optimized around Mk262 (77gr) 5.56x45mm or
 //! M80 (147gr) 7.62x51mm with a 50-yard zero", and that M193/M855 should use a 100-yard
@@ -102,6 +105,13 @@ pub const WIND: &[(f64, f64, f64)] = &[
     (700.0, 1.309, 2.617),
     (800.0, 1.571, 3.140),
 ];
+
+/// 15 mph wind holds: the centers of the row numerals "4", "6" and "8", MILs from the stem.
+/// They sit at exactly 3x the 5 mph hold on their rows (1.878 / 3.144 / 4.713), and the
+/// manual's "WIND HOLDS AND LEADS" figure (PDF page 8) runs its "15 mph" leader through
+/// them. The 500 and 700 rows have no numeral, so no 15 mph hold.
+#[allow(clippy::approx_constant)] // measured subtensions, not constants
+pub const WIND15: &[(f64, f64)] = &[(400.0, 1.861), (600.0, 3.142), (800.0, 4.711)];
 
 /// Moving-target lead dots on the horizontal crosshair: (target speed mph, MILs).
 pub const LEADS: &[(f64, f64, &str)] = &[

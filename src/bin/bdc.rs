@@ -5,9 +5,11 @@
 
 use ballistics::atmo::Atmosphere;
 use ballistics::drag::DragTable;
-use ballistics::reticle::{BDC, LEADS, Mark, WIND};
+use ballistics::reticle::{BDC, LEADS, Mark, WIND, WIND15};
 use ballistics::solver::*;
 
+/// The user's rifle; the M193 and SS109 velocities are from it, and the 77gr is a guess for it.
+const BARREL_IN: f64 = 14.5;
 const SIGHT_HEIGHT_IN: f64 = 2.75;
 const TWIST_IN: f64 = 7.0;
 /// Half-height of the vital zone we call a hit, inches.
@@ -40,7 +42,8 @@ fn loads() -> Vec<Load> {
         },
         Load {
             proj: p("Hornady 77gr OTM", 77.0, 0.990, 0.190),
-            mv: 2650.0,
+            // Mk262 is ~2750 from 20"; ~2600 is plausible from 14.5".
+            mv: 2600.0,
         },
     ]
 }
@@ -185,7 +188,7 @@ fn main() {
     }
     println!("ACSS Raptor 5.56/.308 Yard G2 BDC vs. load");
     println!(
-        "Rifle: sight height {SIGHT_HEIGHT_IN}\", 1:{TWIST_IN} RH. Air: ICAO sea level (59 F, 29.92 inHg, dry) unless noted."
+        "Rifle: {BARREL_IN}\" barrel, sight height {SIGHT_HEIGHT_IN}\", 1:{TWIST_IN} RH. Air: ICAO sea level (59 F, 29.92 inHg, dry) unless noted."
     );
     println!(
         "Miss = where the bullet lands when the mark is held dead on a target at the mark's range (+ high, - low)."
@@ -272,47 +275,99 @@ fn main() {
     }
     println!();
 
-    println!("=== Design check: Mk262-class 77gr (G7 0.190) at 2750 fps, 50 yd zero ===");
+    println!(
+        "=== Design check: Mk262-class 77gr (G7 0.190). Manual: 50 yd zero; spec 2750 fps from 20\" ==="
+    );
     {
-        let mut l = loads().pop().unwrap();
-        l.mv = 2750.0;
-        let c = Curve::new(&l, &rifle, &zero_at(50.0, 0.0, sea), sea);
+        let mut mk262 = loads().pop().unwrap();
+        mk262.mv = 2750.0;
+        let z50 = zero_at(50.0, 0.0, sea);
+        let z100 = zero_at(100.0, 0.0, sea);
+        let (mv100, rms100) = best_mv(&mk262, &rifle, &z100, sea);
+        let c50 = Curve::new(&mk262, &rifle, &z50, sea);
+        let fit100 = Load {
+            proj: mk262.proj.clone(),
+            mv: mv100,
+        };
+        let c100 = Curve::new(&fit100, &rifle, &z100, sea);
+        println!(
+            "  Misses in mil. At 2750 the mark spacing is off by 0.45 mil from 300 to 800 (tilt); the spacing"
+        );
+        println!(
+            "  fits ~2820-2860 fps, where a 50 yd zero leaves every mark ~0.3 mil off. A 100 yd zero at {mv100:.0} fps"
+        );
+        println!(
+            "  fits every mark flat (RMS {rms100:.2}), so the marks alone don't confirm the stated design point."
+        );
+        println!(
+            "  {:>4}  {:>5}  {:>20}  {:>24}",
+            "yd",
+            "mark",
+            "50 yd zero @ 2750",
+            format!("100 yd zero @ {mv100:.0}")
+        );
         for m in BDC {
             println!(
-                "  {:4.0} yd  mark {:5.2} mil  bullet {:5.2} mil  miss {:+5.2} mil {:+6.1}\"",
+                "  {:4.0}  {:5.2}  {:+9.2} mil {:+6.1}\"  {:+13.2} mil {:+6.1}\"",
                 m.range_yd,
                 m.mil,
-                -c.elev_mil[m.range_yd as usize],
-                c.miss_mil(m),
-                c.miss_in(m)
+                c50.miss_mil(m),
+                c50.miss_in(m),
+                c100.miss_mil(m),
+                c100.miss_in(m)
             );
         }
+        println!(
+            "  RMS 300-800: 50 yd zero @ 2750 {:.2} mil | 100 yd zero @ {mv100:.0} {rms100:.2} mil",
+            rms_mil(&c50, &fit_marks())
+        );
     }
     println!();
 
-    println!("=== Primary Arms' own chart (100 yd zero, offset by altitude) ===");
-    let pa = [
-        (
-            "SS109/M855 62gr",
-            [0.5, 0.0, -0.5],
-            "16\" M855: +0.5 / 0 / -0.5",
-        ),
+    println!(
+        "=== Primary Arms' own chart (manual p.7), rows for this barrel, zeroed at each altitude (ICAO) ==="
+    );
+    // (load, chart row, zero range, altitudes ft, inches high at the zero range)
+    type ChartRow = (
+        &'static str,
+        &'static str,
+        f64,
+        &'static [f64],
+        &'static [f64],
+    );
+    let pa: [ChartRow; 3] = [
         (
             "M193 55gr FMJBT",
-            [1.0, 0.5, 0.0],
-            "16\" M193: +1.0 / +0.5 / 0",
+            "14\" M193: zero at 50 yd at 1000/2000/3000 ft",
+            50.0,
+            &[1000.0, 2000.0, 3000.0],
+            &[0.0, 0.0, 0.0],
+        ),
+        (
+            "SS109/M855 62gr",
+            "14.5\" M855: +1.0 / +0.5 / 0 inch at 100 yd at 1000/2000/3000 ft",
+            100.0,
+            &[1000.0, 2000.0, 3000.0],
+            &[1.0, 0.5, 0.0],
+        ),
+        (
+            "Hornady 77gr OTM",
+            "77gr SMK, 2700-2750 fps: +1.0 inch at 100 yd (no altitude given; sea level here)",
+            100.0,
+            &[0.0],
+            &[1.0],
         ),
     ];
     for load in loads() {
-        let Some((_, offs, label)) = pa.iter().find(|p| p.0 == load.proj.name) else {
+        let Some((_, label, zr, alts, offs)) = pa.iter().find(|p| p.0 == load.proj.name) else {
             continue;
         };
-        println!("  {} ({label} inch at 1000/2000/3000 ft)", load.proj.name);
-        for (alt, off) in [1000.0, 2000.0, 3000.0].iter().zip(offs) {
+        println!("  {} @ {:.0} fps ({label})", load.proj.name, load.mv);
+        for (alt, off) in alts.iter().zip(offs.iter()) {
             let atmo = Atmosphere::icao_at_altitude_ft(*alt);
-            let c = Curve::new(&load, &rifle, &zero_at(100.0, *off, atmo), atmo);
+            let c = Curve::new(&load, &rifle, &zero_at(*zr, *off, atmo), atmo);
             let (bo, reach) = best_offset(&load, &rifle, atmo, TOL_IN);
-            print!("    {:>5.0} ft {:+.1}\": miss in @", alt, off);
+            print!("    {:>5.0} ft {:+.1}\" @{zr:.0}: miss in @", alt, off);
             for m in BDC
                 .iter()
                 .filter(|m| m.range_yd % 100.0 == 0.0 && m.range_yd >= 300.0)
@@ -320,14 +375,17 @@ fn main() {
                 print!(" {:.0}:{:+.1}", m.range_yd, c.miss_in(m));
             }
             let (r0, _) = usable_to(&c, TOL_IN);
-            println!("   | +/-{TOL_IN}\" to {r0:.0} yd; best here {bo:+.2}\" -> {reach:.0} yd");
+            println!(
+                "   | +/-{TOL_IN}\" to {r0:.0} yd; best here {bo:+.2}\" @100 -> {reach:.0} yd"
+            );
         }
     }
     println!();
 
     println!("=== Wind: what each dot actually represents (full-value crosswind, mph) ===");
     println!(
-        "Reticle dots are drawn for 5 and 10 mph. Spin drift (right, RH twist) listed separately."
+        "Reticle: two dots per row for 5 and 10 mph (at 400 the hash end is 5 mph); the row numerals\n\
+         4 / 6 / 8 sit at the 15 mph hold. Spin drift (right, RH twist) listed separately."
     );
     for load in loads() {
         let z = zero_at(100.0, 0.0, sea);
@@ -344,17 +402,22 @@ fn main() {
         let full = s.trajectory(&load.proj, &rifle, load.mv, angle, &cond_sd, &ranges);
         println!("  {}", load.proj.name);
         println!(
-            "    range | 10mph drift  | '5 mph' hold = | '10 mph' hold = | spin drift | aero jump @10mph"
+            "    range | 10mph drift  | '5 mph' hold = | '10 mph' hold = | '15 mph' numeral = | spin drift | aero jump @10mph"
         );
         for ((w, p), f) in WIND.iter().zip(&wind).zip(&full) {
             let per_mph = p.windage_mil / 10.0;
+            let w15 = WIND15
+                .iter()
+                .find(|n| n.0 == w.0)
+                .map_or("--".into(), |n| format!("{:.1} mph", n.1 / per_mph));
             println!(
-                "    {:5.0} | {:5.2} mil {:4.1}\" | {:5.1} mph     | {:5.1} mph       | {:4.2} mil   | {:+.2} mil",
+                "    {:5.0} | {:5.2} mil {:4.1}\" | {:5.1} mph     | {:5.1} mph       | {:>9}          | {:4.2} mil   | {:+.2} mil",
                 w.0,
                 p.windage_mil,
                 p.windage_in,
                 w.1 / per_mph,
                 w.2 / per_mph,
+                w15,
                 f.spin_drift_in / (w.0 * 0.036),
                 f.aero_jump_in / (w.0 * 0.036),
             );
@@ -398,34 +461,43 @@ fn main() {
     println!(
         "=== Sensitivity: miss (inches) at 500 / 600 / 800 with each load's best sea-level zero ==="
     );
+    println!(
+        "  Rows marked (re-zeroed) redo the zero under that condition, as you would with that ammo or\n\
+         \x20 at that place. Rows marked (zeroed at 59 F) keep the sea-level zero. Air temperature only:\n\
+         \x20 powder temperature also moves MV, which the +/-75 fps rows bracket."
+    );
     for load in loads() {
         let (off, _) = best_offset(&load, &rifle, sea, TOL_IN);
-        let run = |label: &str, load: &Load, rifle: &Rifle, atmo: Atmosphere| {
-            let c = Curve::new(load, rifle, &zero_at(100.0, off, atmo), atmo);
+        let run_zeroed = |label: &str, load: &Load, rifle: &Rifle, zero_atmo, atmo| {
+            let c = Curve::new(load, rifle, &zero_at(100.0, off, zero_atmo), atmo);
             let pick = |r: f64| c.miss_in(BDC.iter().find(|m| m.range_yd == r).unwrap());
             println!(
-                "    {:<22} {:+6.1} {:+6.1} {:+6.1}",
+                "    {:<26} {:+6.1} {:+6.1} {:+6.1}",
                 label,
                 pick(500.0),
                 pick(600.0),
                 pick(800.0)
             );
         };
+        let run = |label: &str, load: &Load, rifle: &Rifle, atmo| {
+            run_zeroed(label, load, rifle, atmo, atmo)
+        };
         println!("  {} (zero {:+.2}\" @100)", load.proj.name, off);
         run("baseline", &load, &rifle, sea);
         for alt in [2500.0, 5000.0] {
             run(
-                &format!("{alt:.0} ft std atmo"),
+                &format!("{alt:.0} ft (re-zeroed)"),
                 &load,
                 &rifle,
                 Atmosphere::icao_at_altitude_ft(alt),
             );
         }
         for t in [20.0, 100.0] {
-            run(
-                &format!("{t:.0} F sea level"),
+            run_zeroed(
+                &format!("{t:.0} F (zeroed at 59 F)"),
                 &load,
                 &rifle,
+                sea,
                 sea.with_temp_f(t),
             );
         }
@@ -434,11 +506,11 @@ fn main() {
                 proj: load.proj.clone(),
                 mv: load.mv + dv,
             };
-            run(&format!("MV {dv:+.0} fps"), &l, &rifle, sea);
+            run(&format!("MV {dv:+.0} fps (re-zeroed)"), &l, &rifle, sea);
         }
         for sh in [2.5, 3.1] {
             run(
-                &format!("sight height {sh}\""),
+                &format!("sight ht {sh}\" (re-zeroed)"),
                 &load,
                 &Rifle {
                     sight_height_in: sh,
@@ -454,10 +526,11 @@ fn main() {
 fn write_csv(dir: &str, rifle: &Rifle, sea: Atmosphere) {
     use std::fmt::Write;
     let mut miss = String::from(
-        "load,zero,zero_offset_in_at_100,range_yd,mark_mil,miss_in,miss_mil,true_range_yd\n",
+        "load,mv,zero,zero_offset_in_at_100,range_yd,mark_mil,miss_in,miss_mil,true_range_yd\n",
     );
-    let mut wind =
-        String::from("load,range_yd,drift_mil_per_10mph,dot5_mph,dot10_mph,spin_drift_mil\n");
+    let mut wind = String::from(
+        "load,mv,range_yd,drift_mil_per_10mph,dot5_mph,dot10_mph,numeral15_mph,spin_drift_mil\n",
+    );
     for load in loads() {
         let (off, _) = best_offset(&load, rifle, sea, TOL_IN);
         for (name, z) in [
@@ -470,8 +543,9 @@ fn write_csv(dir: &str, rifle: &Rifle, sea: Atmosphere) {
             for m in BDC {
                 writeln!(
                     miss,
-                    "{},{},{:.2},{},{},{:.3},{:.4},{}",
+                    "{},{},{},{:.2},{},{},{:.3},{:.4},{}",
                     load.proj.name,
+                    load.mv,
                     name,
                     zoff,
                     m.range_yd,
@@ -493,14 +567,20 @@ fn write_csv(dir: &str, rifle: &Rifle, sea: Atmosphere) {
         for (w, p) in WIND.iter().zip(&pts) {
             let sd_mil = p.spin_drift_in / (w.0 * 0.036);
             let per_mph = (p.windage_mil - sd_mil) / 10.0;
+            let w15 = WIND15
+                .iter()
+                .find(|n| n.0 == w.0)
+                .map_or(String::new(), |n| format!("{:.3}", n.1 / per_mph));
             writeln!(
                 wind,
-                "{},{},{:.4},{:.3},{:.3},{:.4}",
+                "{},{},{},{:.4},{:.3},{:.3},{},{:.4}",
                 load.proj.name,
+                load.mv,
                 w.0,
                 per_mph * 10.0,
                 w.1 / per_mph,
                 w.2 / per_mph,
+                w15,
                 sd_mil
             )
             .unwrap();
