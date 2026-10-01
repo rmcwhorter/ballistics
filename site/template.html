@@ -1,0 +1,634 @@
+<title>Bits per Shot</title>
+<meta name="description" content="KL divergence, taught with M193 and 77gr impact clouds from a 14.5-inch AR on a PLxC G2 BDC.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ground: #f2f3ef;
+  --panel: #fbfbf8;
+  --ink: #15181a;
+  --ink-2: #444b51;
+  --muted: #6b7279;
+  --rule: #d6d9d2;
+  --grid: #e3e5df;
+  --m193: #2a78d6;
+  --m77: #14946a;
+  --accent: #c8501f;
+  --shape: #8d949b;
+  --tip-bg: #15181a;
+  --tip-ink: #f2f3ef;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #111315;
+    --panel: #181b1e;
+    --ink: #e9ebe6;
+    --ink-2: #c3c8cc;
+    --muted: #949ba2;
+    --rule: #2c3135;
+    --grid: #23272b;
+    --m193: #4a92ea;
+    --m77: #2fb886;
+    --accent: #e8743f;
+    --shape: #7d858c;
+    --tip-bg: #e9ebe6;
+    --tip-ink: #111315;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #111315;
+  --panel: #181b1e;
+  --ink: #e9ebe6;
+  --ink-2: #c3c8cc;
+  --muted: #949ba2;
+  --rule: #2c3135;
+  --grid: #23272b;
+  --m193: #4a92ea;
+  --m77: #2fb886;
+  --accent: #e8743f;
+  --shape: #7d858c;
+  --tip-bg: #e9ebe6;
+  --tip-ink: #111315;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 18px;
+  line-height: 1.6;
+  padding-inline: 20px;
+  padding-block: 0 80px;
+}
+.page { max-width: 1040px; margin: 0 auto; }
+.prose { max-width: 680px; }
+p { margin: 0 0 1em; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.05; }
+h1 { font-size: clamp(56px, 10vw, 104px); font-weight: 700; letter-spacing: -0.01em; text-transform: uppercase; }
+h2 { font-size: 36px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.01em; margin-bottom: 14px; }
+h3 { font-size: 22px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
+.eyebrow { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.m193 { color: var(--m193); font-weight: 600; }
+.m77 { color: var(--m77); font-weight: 600; }
+.acc { color: var(--accent); font-weight: 600; }
+em { font-style: italic; }
+
+header { padding-block: 64px 28px; border-bottom: 2px solid var(--ink); display: grid; gap: 18px; }
+.lede { font-size: 22px; line-height: 1.5; max-width: 700px; color: var(--ink-2); }
+
+section { padding-block: 44px 8px; display: grid; gap: 18px; }
+section + section { border-top: 1px solid var(--rule); }
+
+.loads { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.load { background: var(--panel); border: 1px solid var(--rule); border-top: 4px solid var(--c); padding: 16px 18px; display: grid; gap: 8px; }
+.load h3 { color: var(--c); }
+.load dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 0; font-size: 15px; }
+.load dt { color: var(--muted); font-family: var(--display); letter-spacing: 0.05em; text-transform: uppercase; font-size: 15px; }
+.load dd { margin: 0; font-family: var(--mono); font-size: 14px; }
+
+.rangebar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--ground); border-bottom: 1px solid var(--rule);
+  padding-block: 10px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+}
+.rangebar .label { font-family: var(--display); font-size: 17px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--ink); }
+.seg button {
+  font: 500 15px var(--mono); padding: 7px 11px; background: transparent; color: var(--ink);
+  border: 0; border-right: 1px solid var(--rule); cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rangebar .hold { font-size: 15px; color: var(--muted); }
+
+figure { margin: 0; display: grid; gap: 8px; }
+figcaption { font-size: 15px; color: var(--muted); max-width: 680px; line-height: 1.45; }
+.chart { position: relative; width: 100%; background: var(--panel); border: 1px solid var(--rule); }
+.chart canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 15px; color: var(--ink-2); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 7px; vertical-align: middle; background: var(--c); border-radius: 2px; }
+.legend .dash::before { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
+
+.formula {
+  font-family: var(--mono); font-size: 17px; background: var(--panel); border: 1px solid var(--rule);
+  padding: 14px 18px; overflow-x: auto; white-space: nowrap;
+}
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.stat { display: grid; gap: 2px; padding: 14px 0; border-top: 2px solid var(--c); }
+.stat .k { font-family: var(--display); font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.stat .v { font-family: var(--display); font-size: 56px; font-weight: 700; line-height: 1; color: var(--ink); }
+.stat .v small { font-size: 22px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.stat .s { font-size: 15px; color: var(--muted); }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+.callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; color: var(--ink-2); max-width: 680px; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--display); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: 15px; color: var(--ink-2); }
+td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+th.n { text-align: right; }
+tr:last-child td { border-bottom: 0; }
+tr.truth td { font-weight: 600; }
+.note { color: var(--muted); font-size: 14px; }
+
+.tip {
+  position: absolute; pointer-events: none; background: var(--tip-bg); color: var(--tip-ink);
+  font: 13px/1.4 var(--mono); padding: 6px 9px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px));
+}
+code { font-family: var(--mono); font-size: 0.85em; background: var(--panel); border: 1px solid var(--rule); padding: 1px 5px; }
+pre { font-family: var(--mono); font-size: 14px; background: var(--panel); border: 1px solid var(--rule); padding: 14px 16px; overflow-x: auto; margin: 0; }
+footer { padding-block: 40px 0; color: var(--muted); font-size: 14px; border-top: 2px solid var(--ink); margin-top: 40px; }
+@media (max-width: 520px) {
+  body { font-size: 17px; }
+  .lede { font-size: 19px; }
+  .stat .v { font-size: 44px; }
+  h2 { font-size: 30px; }
+}
+</style>
+
+<main class="page">
+  <header>
+    <div class="eyebrow">KL divergence, explained with a rifle</div>
+    <h1>Bits per Shot</h1>
+    <p class="lede">You hear a hit and walk up to the target. One hole. Was that M193 or the 77gr? KL divergence answers a precise version of that question: on average, how much does one impact tell you about which cartridge made it?</p>
+  </header>
+
+  <section>
+    <div class="prose">
+      <h2>The two loads</h2>
+      <p>Same 14.5" AR, same PLxC 1-8x24 RDB with the ACSS Raptor G2 reticle, each load zeroed at 50 yards. The shooter holds the BDC mark for the range. Every simulated shot draws a muzzle velocity, a wind-call error, and the rifle-and-ammo dispersion, then lands wherever the trajectory solver says it does.</p>
+    </div>
+    <div class="loads">
+      <div class="load" style="--c: var(--m193)">
+        <h3>M193 · 55gr FMJ</h3>
+        <dl>
+          <dt>Muzzle velocity</dt><dd>3032 fps, SD 35 fps</dd>
+          <dt>Dispersion</dt><dd>0.75 MOA per axis (~2.5 MOA groups)</dd>
+          <dt>Drag</dt><dd>G7 BC 0.120</dd>
+        </dl>
+      </div>
+      <div class="load" style="--c: var(--m77)">
+        <h3>Hornady · 77gr OTM</h3>
+        <dl>
+          <dt>Muzzle velocity</dt><dd>2600 fps, SD 15 fps</dd>
+          <dt>Dispersion</dt><dd>0.35 MOA per axis (~1 MOA groups)</dd>
+          <dt>Drag</dt><dd>G7 BC 0.190</dd>
+        </dl>
+      </div>
+    </div>
+    <p class="note prose">Both loads share an uncalled crosswind with a 3 mph standard deviation. 200,000 shots per load per range.</p>
+  </section>
+
+  <div class="rangebar" role="group" aria-label="Target distance">
+    <span class="label">Target at</span>
+    <div class="seg" id="seg"></div>
+    <span class="hold" id="holdNote"></span>
+  </div>
+
+  <section>
+    <div class="prose">
+      <h2>Two clouds on the target</h2>
+      <p id="cloudText"></p>
+    </div>
+    <figure>
+      <div class="legend"><span style="--c: var(--m193)">M193 impacts</span><span style="--c: var(--m77)">77gr impacts</span><span style="--c: var(--ink)">ellipses hold 86% of shots (2σ)</span></div>
+      <div class="chart"><canvas id="scatter" height="520" aria-label="Impact scatter for both loads"></canvas></div>
+      <figcaption>Inches on the target, aim point at the crosshair. 1,200 shots of each load drawn; equal scale on both axes.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Surprise, and the gap between two surprises</h2>
+      <p>Start with <em>surprise</em>. If you believe a hole lands at <span class="mono">x</span> with probability density <span class="mono">q(x)</span>, seeing it there surprises you by <span class="mono">-log₂ q(x)</span> bits. Unlikely holes are big surprises. A hole in the middle of the cloud you expected is a small one.</p>
+      <p>Now suppose the truth is <span class="mono">P</span> but you're carrying model <span class="mono">Q</span> in your head. Every hole surprises you by <span class="mono">-log₂ q(x)</span> when it should only have surprised you by <span class="mono">-log₂ p(x)</span>. The difference, averaged over the shots reality actually produces, is the KL divergence:</p>
+    </div>
+    <div class="formula">D(P‖Q) = E<sub>x~P</sub>[ log₂ p(x) - log₂ q(x) ] = ∫ p(x) log₂( p(x) / q(x) ) dx</div>
+    <div class="prose">
+      <p>Read the same quantity a second way. <span class="mono">log₂ p(x)/q(x)</span> is the <em>evidence</em> one hole carries for "it was P" over "it was Q". Each bit doubles the odds. So KL is the average evidence per shot, when P really is what you're shooting.</p>
+    </div>
+    <div class="pair" id="klPair"></div>
+    <figure>
+      <h3>Evidence carried by each shot</h3>
+      <div class="two">
+        <div class="chart"><canvas id="histM" height="260" aria-label="Evidence per M193 shot"></canvas></div>
+        <div class="chart"><canvas id="hist7" height="260" aria-label="Evidence per 77gr shot"></canvas></div>
+      </div>
+      <figcaption id="histCap"></figcaption>
+    </figure>
+    <p class="callout" id="paradox"></p>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Why the two directions disagree</h2>
+      <p>KL is not a distance: <span class="mono">D(P‖Q)</span> and <span class="mono">D(Q‖P)</span> are different numbers. For two bell-shaped clouds the divergence splits cleanly into two parts. One is how far apart the centers are, measured in units of the <em>model's</em> spread. The other is how badly the model's shape fits the truth's shape.</p>
+    </div>
+    <figure>
+      <div class="legend"><span style="--c: var(--accent)">center offset term</span><span style="--c: var(--shape)">shape mismatch term</span></div>
+      <div class="chart"><canvas id="decomp" height="170" aria-label="KL decomposition"></canvas></div>
+      <figcaption>Gaussian-approximation split of each direction at the selected range, in bits.</figcaption>
+    </figure>
+    <div class="prose">
+      <p id="asymText"></p>
+      <p>This is why, when you fit a model to data, it matters which direction you minimize. Minimizing <span class="mono">D(data‖model)</span> punishes a model that calls real outcomes impossible, so it spreads the model wide to cover everything. Minimizing <span class="mono">D(model‖data)</span> punishes a model that puts mass where data never goes, so it shrinks onto one mode. Maximum likelihood is the first one.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Evidence adds up, shot after shot</h2>
+      <p>Independent shots add their evidence. After <span class="mono">n</span> holes the total log-odds is the sum of <span class="mono">n</span> per-shot draws, so it random-walks upward with an average slope of exactly KL bits per shot. Every line below is one string of 25 shots.</p>
+    </div>
+    <figure>
+      <div class="legend"><span style="--c: var(--m193)">truth M193: evidence for M193</span><span style="--c: var(--m77)">truth 77gr: evidence for 77gr</span><span class="dash" style="--c: var(--ink)">slope = KL</span></div>
+      <div class="chart"><canvas id="walks" height="360" aria-label="Cumulative evidence random walks"></canvas></div>
+      <figcaption>Cumulative log₂ likelihood ratio in favor of the true load, in bits. Above zero, you'd guess right.</figcaption>
+    </figure>
+    <figure>
+      <h3>How often you name the right load</h3>
+      <div class="legend"><span style="--c: var(--m193)">firing M193</span><span style="--c: var(--m77)">firing 77gr</span></div>
+      <div class="chart"><canvas id="ident" height="280" aria-label="Identification accuracy vs number of shots"></canvas></div>
+      <figcaption>Pick whichever load makes the holes more likely, starting from even odds. Hover for values.</figcaption>
+    </figure>
+    <p class="callout">Stein's lemma makes the slope precise. Suppose you only rarely allow yourself to mistake M193 for 77gr. Then the best possible chance of mistaking 77gr for M193 falls like <span class="mono" style="white-space: nowrap">2^(-n · D(M193‖77gr))</span> as the shot count <span class="mono">n</span> grows. KL is the exponent on how fast you learn.</p>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>KL across distance</h2>
+      <p id="rangeText"></p>
+    </div>
+    <figure>
+      <div class="legend"><span style="--c: var(--m193)">D(M193‖77gr)</span><span style="--c: var(--m77)">D(77gr‖M193)</span></div>
+      <div class="chart"><canvas id="byRange" height="320" aria-label="KL by range"></canvas></div>
+      <figcaption>Exact KL for this model, in bits per shot. Click a range to select it.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Estimating KL from samples is hard</h2>
+      <p>Here we know the exact density of every cloud, so we can compute the true KL. Usually you only have samples. The table shows what four common estimators make of the same shots.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Estimator</th><th class="n">D(M193‖77gr)</th><th class="n">D(77gr‖M193)</th><th>What it's doing</th></tr></thead>
+        <tbody id="estBody"></tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p>The lesson hides in where the KL comes from. Most of <span class="mono">D(M193‖77gr)</span> comes from a few M193 holes far out in the fringe, where the 77gr cloud almost never lands. Estimators that need 77gr samples near those holes to judge <span class="mono">q(x)</span> can't see them, so they come out low and creep up slowly as you add data.</p>
+      <p>Plain histograms are worse: one bin where M193 landed and 77gr never did makes <span class="mono">q = 0</span>, and <span class="mono">log(p/0)</span> is infinite. That's not a bug in the math. If your model says a hole is truly impossible and it happens anyway, you're infinitely surprised. Smoothing the counts hides the infinity, but the answer then depends on how much you smooth.</p>
+      <p>The Gaussian formula works well while the clouds really are bell-shaped. At 800 yards M193 is going transonic, small velocity changes swing the drop a lot, the cloud grows a long tail, and the Gaussian fit undershoots.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>One more reading: wasted bits</h2>
+      <p>Cross-entropy <span class="mono">H(P,Q) = H(P) + D(P‖Q)</span>. If you built a code (or a betting strategy, or a dope card) tuned for 77gr and then fed it M193, you'd pay <span class="mono">H(P)</span> bits per shot that no code can avoid, plus <span class="mono">D(P‖Q)</span> bits for using the wrong model. KL is the price of being confidently wrong.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>How this was computed</h2>
+      <p>Trajectories come from a 3-DOF point-mass solver (RK4, G7 drag, ICAO sea-level air, Litz spin drift and aerodynamic jump), cross-checked against py-ballisticcalc. The solver tabulates each load's impact against muzzle velocity, and wind and dispersion are layered on top. Given a velocity, a shot is exactly Gaussian, so each cloud's true density is a Gaussian mixture over velocity, integrated with 48-point Gauss-Hermite quadrature. The exact KL is a Monte Carlo average of the log density ratio over 50,000 shots.</p>
+    </div>
+    <pre>cd ~/repos/ballistics
+cargo run --release --bin sensitivity &gt; out/sensitivity.csv
+uv run --with numpy --with scipy --with pandas scripts/kl.py out</pre>
+  </section>
+
+  <footer>Assumptions: M193 at 3032 fps and 77gr at 2600 fps from 14.5"; 2.75" sight height, 1:7 twist, 50 yd zero, ICAO sea level. Velocity SDs, dispersion and wind-call error are illustrative, not measured.</footer>
+</main>
+
+<script>
+const DATA = __DATA__;
+const RANGES = Object.keys(DATA.ranges).map(Number);
+const HOLD = {100: 0, 200: 0.34, 300: 0.931, 400: 1.739, 500: 2.806, 600: 4.119, 700: 5.56, 800: 7.36};
+const MT = "M193||77gr", TM = "77gr||M193";
+let R = 400;
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, d = 2) => Number(v).toFixed(d);
+const pct = v => (100 * v).toFixed(0) + "%";
+const odds = b => b > 20 ? "2^" + b.toFixed(0) : "×" + (2 ** b < 100 ? (2 ** b).toFixed(1) : Math.round(2 ** b).toLocaleString());
+
+function setup(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth - 2;
+  const h = canvas.getAttribute("height") * 1;
+  canvas.style.height = h + "px";
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h };
+}
+function niceStep(span, target) {
+  const raw = span / target, p = 10 ** Math.floor(Math.log10(raw));
+  for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p;
+  return 10 * p;
+}
+function text(ctx, s, x, y, o = {}) {
+  ctx.font = `${o.weight || 400} ${o.size || 12}px ${o.font || css("--mono")}`;
+  ctx.fillStyle = o.color || css("--muted");
+  ctx.textAlign = o.align || "left";
+  ctx.textBaseline = o.base || "alphabetic";
+  ctx.fillText(s, x, y);
+}
+
+function drawScatter() {
+  const { ctx, w, h } = setup(document.getElementById("scatter"));
+  const L = DATA.ranges[R].loads;
+  const all = [...L.M193.pts, ...L["77gr"].pts];
+  const q = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(p * (s.length - 1))]; };
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+  let x0 = Math.min(q(xs, 0.005), 0), x1 = Math.max(q(xs, 0.995), 0);
+  let y0 = Math.min(q(ys, 0.005), 0), y1 = Math.max(q(ys, 0.995), 0);
+  const pad = { l: 46, r: 16, t: 16, b: 34 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+  const s = Math.min(pw / (x1 - x0), ph / (y1 - y0)) * 0.94;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const X = v => pad.l + pw / 2 + (v - cx) * s;
+  const Y = v => pad.t + ph / 2 - (v - cy) * s;
+  const vx0 = cx - pw / 2 / s, vx1 = cx + pw / 2 / s, vy0 = cy - ph / 2 / s, vy1 = cy + ph / 2 / s;
+  const step = niceStep(Math.max(vx1 - vx0, vy1 - vy0), 8);
+  ctx.lineWidth = 1; ctx.strokeStyle = css("--grid");
+  for (let v = Math.ceil(vx0 / step) * step; v <= vx1; v += step) {
+    ctx.beginPath(); ctx.moveTo(X(v), pad.t); ctx.lineTo(X(v), h - pad.b); ctx.stroke();
+    text(ctx, (+v.toFixed(1)) + "\"", X(v), h - pad.b + 16, { align: "center", size: 11 });
+  }
+  for (let v = Math.ceil(vy0 / step) * step; v <= vy1; v += step) {
+    ctx.beginPath(); ctx.moveTo(pad.l, Y(v)); ctx.lineTo(w - pad.r, Y(v)); ctx.stroke();
+    text(ctx, (+v.toFixed(1)) + "\"", pad.l - 6, Y(v) + 4, { align: "right", size: 11 });
+  }
+  text(ctx, "← left · right →", w - pad.r, h - 6, { align: "right", size: 11 });
+  ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, pw, ph); ctx.clip();
+  for (const [key, col] of [["M193", css("--m193")], ["77gr", css("--m77")]]) {
+    ctx.fillStyle = col; ctx.globalAlpha = 0.38;
+    for (const [px, py] of L[key].pts) { ctx.beginPath(); ctx.arc(X(px), Y(py), 1.7, 0, 7); ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+  for (const [key, col] of [["M193", css("--m193")], ["77gr", css("--m77")]]) {
+    const [[a, b], [, d]] = L[key].cov, m = L[key].mean;
+    const tr = a + d, det = a * d - b * b, disc = Math.sqrt(Math.max(tr * tr / 4 - det, 0));
+    const l1 = tr / 2 + disc, l2 = tr / 2 - disc, ang = Math.atan2(l1 - a, b || 1e-9);
+    ctx.save(); ctx.translate(X(m[0]), Y(m[1])); ctx.rotate(-ang);
+    ctx.beginPath(); ctx.ellipse(0, 0, 2 * Math.sqrt(l1) * s, 2 * Math.sqrt(Math.max(l2, 0)) * s, 0, 0, 7);
+    ctx.strokeStyle = css("--panel"); ctx.lineWidth = 4.5; ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  }
+  // Aim point.
+  ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.5;
+  const ax = X(0), ay = Y(0);
+  ctx.beginPath(); ctx.moveTo(ax - 12, ay); ctx.lineTo(ax + 12, ay); ctx.moveTo(ax, ay - 12); ctx.lineTo(ax, ay + 12); ctx.stroke();
+  ctx.restore();
+  text(ctx, "aim", ax + 15, ay - 6, { color: css("--ink"), size: 12, weight: 500 });
+}
+
+function drawHist(id, tag, col, title) {
+  const { ctx, w, h } = setup(document.getElementById(id));
+  const d = DATA.ranges[R][tag], v = d.llr_samples;
+  const sorted = [...v].sort((a, b) => a - b);
+  const lo = Math.min(sorted[Math.floor(0.002 * v.length)], -1);
+  const hi = Math.max(sorted[Math.floor(0.97 * v.length)], d.exact * 1.4, 2);
+  const nb = 34, bw = (hi - lo) / nb, counts = new Array(nb + 1).fill(0);
+  for (const x of v) counts[Math.min(Math.max(Math.floor((x - lo) / bw), 0), nb)]++;
+  const pad = { l: 12, r: 12, t: 30, b: 34 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b, cw = pw / (nb + 1);
+  const max = Math.max(...counts);
+  const X = x => pad.l + (x - lo) / bw * cw;
+  text(ctx, title, pad.l, 18, { color: css("--ink-2"), size: 13, weight: 500 });
+  for (let i = 0; i <= nb; i++) {
+    const bh = counts[i] / max * ph, x = pad.l + i * cw;
+    const center = lo + (i + 0.5) * bw;
+    ctx.fillStyle = i === nb ? css("--shape") : (center < 0 ? css("--shape") : col);
+    ctx.globalAlpha = i === nb ? 0.5 : 0.9;
+    ctx.fillRect(x + 1, pad.t + ph - bh, cw - 2, bh);
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(X(0), pad.t); ctx.lineTo(X(0), pad.t + ph); ctx.stroke();
+  text(ctx, "0", X(0), h - pad.b + 15, { align: "center", size: 11 });
+  const mx = X(d.exact);
+  ctx.strokeStyle = css("--accent"); ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
+  ctx.beginPath(); ctx.moveTo(mx, pad.t - 4); ctx.lineTo(mx, pad.t + ph); ctx.stroke(); ctx.setLineDash([]);
+  const right = mx > w * 0.72;
+  text(ctx, `mean = KL = ${fmt(d.exact)} bits`, mx + (right ? -6 : 6), pad.t + 10, { align: right ? "right" : "left", color: css("--accent"), size: 12, weight: 500 });
+  text(ctx, `${fmt(lo, 0)}`, pad.l, h - pad.b + 15, { size: 11 });
+  text(ctx, `≥${fmt(hi, 0)} bits`, w - pad.r, h - pad.b + 15, { align: "right", size: 11 });
+  text(ctx, "bits of evidence for the true load →", pad.l + pw / 2, h - 4, { align: "center", size: 11 });
+}
+
+function drawDecomp() {
+  const { ctx, w, h } = setup(document.getElementById("decomp"));
+  const rows = [[MT, "D(M193‖77gr)"], [TM, "D(77gr‖M193)"]];
+  const max = Math.max(...rows.map(([t]) => DATA.ranges[R][t].gauss));
+  const pad = { l: 128, r: 100, t: 18, b: 18 };
+  const bh = 40, gap = 34, pw = w - pad.l - pad.r;
+  rows.forEach(([t, label], i) => {
+    const d = DATA.ranges[R][t], y = pad.t + i * (bh + gap);
+    text(ctx, label, 0, y + bh / 2 + 5, { color: css("--ink"), size: 13, weight: 500 });
+    const a = d.mean_term / max * pw, b = d.shape_term / max * pw;
+    ctx.fillStyle = css("--accent"); roundRect(ctx, pad.l, y, Math.max(a - 1, 0), bh, 3);
+    ctx.fillStyle = css("--shape"); roundRect(ctx, pad.l + a + 1, y, Math.max(b - 1, 0), bh, 3);
+    text(ctx, `${fmt(d.gauss)} bits`, pad.l + a + b + 8, y + bh / 2 + 5, { color: css("--ink"), size: 13, weight: 500 });
+    const lab = (v, x0, wd) => { if (wd > 60) text(ctx, fmt(v), x0 + wd / 2, y + bh / 2 + 4, { align: "center", color: css("--panel"), size: 12, weight: 500 }); };
+    lab(d.mean_term, pad.l, a); lab(d.shape_term, pad.l + a, b);
+  });
+}
+function roundRect(ctx, x, y, w, h, r) {
+  if (w <= 0) return;
+  r = Math.min(r, w / 2);
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.fill();
+}
+
+function axes(ctx, w, h, pad, ymin, ymax, ystep, fmtY) {
+  const ph = h - pad.t - pad.b;
+  const Y = v => pad.t + ph - (v - ymin) / (ymax - ymin) * ph;
+  ctx.strokeStyle = css("--grid"); ctx.lineWidth = 1;
+  for (let v = ymin; v <= ymax + 1e-9; v += ystep) {
+    ctx.beginPath(); ctx.moveTo(pad.l, Y(v)); ctx.lineTo(w - pad.r, Y(v)); ctx.stroke();
+    text(ctx, fmtY(v), pad.l - 8, Y(v) + 4, { align: "right", size: 11 });
+  }
+  return Y;
+}
+
+function drawWalks() {
+  const { ctx, w, h } = setup(document.getElementById("walks"));
+  const A = DATA.ranges[R][MT], B = DATA.ranges[R][TM];
+  const vals = [...A.llr_walks.flat(), ...B.llr_walks.flat(), 0, A.exact * 25, B.exact * 25];
+  let ymin = Math.min(...vals), ymax = Math.max(...vals);
+  const step = niceStep(ymax - ymin, 6);
+  ymin = Math.floor(ymin / step) * step; ymax = Math.ceil(ymax / step) * step;
+  const pad = { l: 56, r: 18, t: 14, b: 34 };
+  const Y = axes(ctx, w, h, pad, ymin, ymax, step, v => v.toLocaleString());
+  const X = n => pad.l + n / 25 * (w - pad.l - pad.r);
+  for (let n = 0; n <= 25; n += 5) text(ctx, n, X(n), h - pad.b + 16, { align: "center", size: 11 });
+  text(ctx, "shots", w - pad.r, h - 4, { align: "right", size: 11 });
+  ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(pad.l, Y(0)); ctx.lineTo(w - pad.r, Y(0)); ctx.stroke();
+  for (const [d, col] of [[A, css("--m193")], [B, css("--m77")]]) {
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.4; ctx.lineWidth = 1.3;
+    for (const walk of d.llr_walks) {
+      ctx.beginPath(); ctx.moveTo(X(0), Y(0));
+      walk.forEach((v, i) => ctx.lineTo(X(i + 1), Y(v))); ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.lineWidth = 2.5; ctx.setLineDash([7, 4]);
+    ctx.strokeStyle = css("--panel"); ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(25), Y(d.exact * 25)); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(25), Y(d.exact * 25)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+const hover = {};
+function drawIdent() {
+  const cv = document.getElementById("ident");
+  const { ctx, w, h } = setup(cv);
+  const A = DATA.ranges[R][MT].identify, B = DATA.ranges[R][TM].identify;
+  const pad = { l: 52, r: 18, t: 14, b: 34 };
+  const Y = axes(ctx, w, h, pad, 0.5, 1.0, 0.1, v => pct(v));
+  const X = n => pad.l + (n - 1) / 9 * (w - pad.l - pad.r);
+  for (let n = 1; n <= 10; n++) text(ctx, n, X(n), h - pad.b + 16, { align: "center", size: 11 });
+  text(ctx, "shots seen", w - pad.r, h - 4, { align: "right", size: 11 });
+  const pts = [];
+  for (const [arr, col, name] of [[A, css("--m193"), "M193"], [B, css("--m77"), "77gr"]]) {
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+    arr.forEach((v, i) => i ? ctx.lineTo(X(i + 1), Y(v)) : ctx.moveTo(X(1), Y(v))); ctx.stroke();
+    arr.forEach((v, i) => {
+      ctx.beginPath(); ctx.arc(X(i + 1), Y(v), 4.5, 0, 7); ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = css("--panel"); ctx.stroke();
+      pts.push({ x: X(i + 1), y: Y(v), label: `${name}, ${i + 1} shot${i ? "s" : ""}: ${(100 * v).toFixed(1)}% right` });
+    });
+  }
+  hover.ident = pts;
+}
+
+function drawByRange() {
+  const cv = document.getElementById("byRange");
+  const { ctx, w, h } = setup(cv);
+  const CAP = 14;
+  const pad = { l: 44, r: 22, t: 22, b: 34 };
+  const Y = axes(ctx, w, h, pad, 0, CAP, 2, v => v);
+  const X = r => pad.l + (r - 100) / 700 * (w - pad.l - pad.r);
+  ctx.fillStyle = css("--grid");
+  ctx.fillRect(X(R) - 16, pad.t, 32, h - pad.t - pad.b);
+  RANGES.forEach(r => text(ctx, r, X(r), h - pad.b + 16, { align: "center", size: 11, color: r === R ? css("--ink") : css("--muted"), weight: r === R ? 600 : 400 }));
+  text(ctx, "yards", w - pad.r, h - 4, { align: "right", size: 11 });
+  const pts = [];
+  for (const [t, col, name] of [[MT, css("--m193"), "D(M193‖77gr)"], [TM, css("--m77"), "D(77gr‖M193)"]]) {
+    ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t - 10, w, h); ctx.clip();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+    RANGES.forEach((r, i) => { const v = Math.min(DATA.ranges[r][t].exact, CAP + 0.6); i ? ctx.lineTo(X(r), Y(v)) : ctx.moveTo(X(r), Y(v)); });
+    ctx.stroke(); ctx.restore();
+    RANGES.forEach(r => {
+      const v = DATA.ranges[r][t].exact, off = v > CAP;
+      const y = Y(Math.min(v, CAP + 0.6));
+      ctx.beginPath(); ctx.arc(X(r), y, 4.5, 0, 7); ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = css("--panel"); ctx.stroke();
+      if (off) text(ctx, `${fmt(v, 1)} ↑`, X(r) - 8, y + 4, { align: "right", color: css("--ink"), size: 12, weight: 500 });
+      pts.push({ x: X(r), y, r, label: `${r} yd ${name} = ${fmt(v)} bits` });
+    });
+  }
+  hover.byRange = pts;
+}
+
+function attachHover(id, key, onClick) {
+  const cv = document.getElementById(id), box = cv.parentElement;
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; box.appendChild(tip);
+  const nearest = e => {
+    const rect = cv.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let best = null, bd = 28 * 28;
+    for (const p of hover[key] || []) { const dd = (p.x - mx) ** 2 + (p.y - my) ** 2; if (dd < bd) { bd = dd; best = p; } }
+    return best;
+  };
+  cv.addEventListener("mousemove", e => {
+    const p = nearest(e);
+    if (!p) { tip.hidden = true; cv.style.cursor = ""; return; }
+    tip.hidden = false; tip.textContent = p.label; tip.style.left = p.x + "px"; tip.style.top = p.y + "px";
+    cv.style.cursor = onClick ? "pointer" : "";
+  });
+  cv.addEventListener("mouseleave", () => { tip.hidden = true; });
+  if (onClick) cv.addEventListener("click", e => { const p = nearest(e); if (p) onClick(p); });
+}
+
+function words() {
+  const d = DATA.ranges[R], L = d.loads, A = d[MT], B = d[TM];
+  const sd = (k, i) => Math.sqrt(L[k].cov[i][i]);
+  document.getElementById("holdNote").textContent = R === 100 ? "holding the chevron tip" : `holding the ${R} yd BDC mark (${fmt(HOLD[R])} mil)`;
+  const dy = L["77gr"].mean[1] - L.M193.mean[1];
+  document.getElementById("cloudText").innerHTML =
+    `At ${R} yards the <span class="m193">M193</span> cloud is centered ${fmt(Math.abs(L.M193.mean[1]), 1)}" ${L.M193.mean[1] >= 0 ? "high" : "low"} and spreads ${fmt(sd("M193", 0), 1)}" × ${fmt(sd("M193", 1), 1)}" (one standard deviation, horizontal × vertical). ` +
+    `The <span class="m77">77gr</span> cloud is centered ${fmt(Math.abs(L["77gr"].mean[1]), 1)}" ${L["77gr"].mean[1] >= 0 ? "high" : "low"} and spreads ${fmt(sd("77gr", 0), 1)}" × ${fmt(sd("77gr", 1), 1)}". ` +
+    `Wind spreads both clouds sideways, and M193 more, because the light bullet drifts further. The vertical gap of ${fmt(Math.abs(dy), 1)}" is the BDC fitting one load better than the other.`;
+  document.getElementById("klPair").innerHTML = [[A, "D(M193‖77gr)", "var(--m193)", "M193", "77gr"], [B, "D(77gr‖M193)", "var(--m77)", "77gr", "M193"]].map(([x, k, c, t, m]) =>
+    `<div class="stat" style="--c:${c}"><div class="k">${k}</div><div class="v num">${fmt(x.exact)}<small>bits</small></div>` +
+    `<div class="s">Firing ${t} while expecting ${m}: each hole is on average ${fmt(x.exact)} bits more surprising than it should be. As evidence, that's odds ${odds(x.exact)} per shot in favor of the truth, on average.</div></div>`).join("");
+  const negA = A.llr_samples.filter(v => v < 0).length / A.llr_samples.length;
+  const negB = B.llr_samples.filter(v => v < 0).length / B.llr_samples.length;
+  document.getElementById("histCap").innerHTML =
+    `Each bar counts shots by how much evidence that single hole carries. Gray bars left of zero are holes that point the wrong way: <span class="m193">${pct(negA)}</span> of M193 holes and <span class="m77">${pct(negB)}</span> of 77gr holes look more like the other load. The last bar collects everything beyond the axis.`;
+  document.getElementById("paradox").innerHTML = A.exact > B.exact && A.identify[0] < B.identify[0]
+    ? `Notice the paradox. <span class="mono">D(M193‖77gr)</span> is ${fmt(A.exact / B.exact, 1)}× bigger, yet one hole names M193 correctly only ${pct(A.identify[0])} of the time, against ${pct(B.identify[0])} for 77gr. KL is an <em>average</em>. Most M193 holes land inside the overlap and mildly favor 77gr, while a few land far out in the fringe and favor M193 by dozens of bits. The average is dominated by those rare decisive shots. KL measures expected evidence, not how often a single shot gets it right.`
+    : `KL is an <em>average</em> of the evidence above, not the chance a single hole points the right way. One hole names M193 correctly ${pct(A.identify[0])} of the time and 77gr ${pct(B.identify[0])}. The average is pulled up by rare, decisive shots in the long right tail.`;
+  const mt = A.mean_term, st = A.shape_term;
+  document.getElementById("asymText").innerHTML =
+    `Look at the shape term (gray): ${fmt(A.shape_term)} bits one way, ${fmt(B.shape_term)} the other. When reality is the <em>wide</em> M193 cloud and your model is the <em>tight</em> 77gr cloud, many real holes land where your model says almost nothing should, and that costs a lot of surprise. Run it the other way and every 77gr hole lands somewhere the wide M193 model already allows, so the penalty is mild. ` +
+    `The center term (orange) is ${fmt(mt)} versus ${fmt(B.mean_term)} bits for the same reason: the same ${fmt(Math.hypot(L.M193.mean[0] - L["77gr"].mean[0], L.M193.mean[1] - L["77gr"].mean[1]), 1)}" offset is measured in units of the model's spread, and a tight model makes it look larger.`;
+  const r6 = DATA.ranges[600];
+  document.getElementById("rangeText").innerHTML =
+    `KL doesn't simply grow with distance. The shape terms stay roughly constant, because both clouds grow in roughly the same proportion. The center term rises and falls with where each load lands on the BDC. At 600 yards the two centers nearly coincide, so the divergence drops to ${fmt(r6[MT].exact, 1)} bits and you can barely tell the loads apart. At 800 yards M193 falls 80" below the mark and goes transonic, and <span class="mono">D(M193‖77gr)</span> jumps to ${fmt(DATA.ranges[800][MT].exact, 0)} bits. One hole is then nearly conclusive.`;
+  const row = (name, a, b, what, cls = "") => `<tr class="${cls}"><td>${name}</td><td class="n">${a}</td><td class="n">${b}</td><td>${what}</td></tr>`;
+  const fx = v => v === null ? "∞" : fmt(v);
+  document.getElementById("estBody").innerHTML =
+    row("Exact (this model)", fmt(A.exact), fmt(B.exact), "True densities by quadrature; Monte Carlo over 50,000 shots. The answer to beat.", "truth") +
+    row("Gaussian fit", fmt(A.gauss), fmt(B.gauss), "Fit a mean and covariance to each cloud, use the closed form. Right when the cloud is bell-shaped.") +
+    row("k-nearest neighbors", fmt(A.knn), fmt(B.knn), "Wang-Kulkarni-Verdú estimator, k = 5, 20,000 shots each. No model needed, but biased low when the tails matter.") +
+    row("Histogram, smoothed", fmt(A.hist_smooth), fmt(B.hist_smooth), "1-inch bins, half a count added to every bin. The answer depends on that choice.") +
+    row("Histogram, raw", fx(A.hist_naive), fx(B.hist_naive), `1-inch bins as counted. ${A.hist_naive_empty_bins} bins hold M193 holes but no 77gr hole${B.hist_naive_empty_bins ? `, and ${B.hist_naive_empty_bins} the reverse` : ""}: log(p/0).`);
+}
+
+function render() {
+  document.querySelectorAll("#seg button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.r === R)));
+  words();
+  drawScatter();
+  drawHist("histM", MT, css("--m193"), "Firing M193: evidence for M193 over 77gr");
+  drawHist("hist7", TM, css("--m77"), "Firing 77gr: evidence for 77gr over M193");
+  drawDecomp(); drawWalks(); drawIdent(); drawByRange();
+}
+
+const seg = document.getElementById("seg");
+RANGES.forEach(r => {
+  const b = document.createElement("button");
+  b.id = "range-" + r; b.dataset.r = r; b.textContent = r;
+  b.addEventListener("click", () => { R = r; render(); });
+  seg.appendChild(b);
+});
+attachHover("ident", "ident");
+attachHover("byRange", "byRange", p => { R = p.r; render(); });
+let raf;
+window.addEventListener("resize", () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+document.fonts?.ready.then(render);
+render();
+</script>
